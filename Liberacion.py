@@ -89,6 +89,17 @@ def lectura_data():
             solares=df["Solares"].iloc[0]
             hp_total=df["HP'S TOTALES"].iloc[0]
             puertos_habilitados=df["PUERTOS HABILITADOS"].iloc[0]
+            #Comprobar region 
+            if (region=='R1'):
+                #leer Correo_R1.md
+                with open("correos/Correo_R1.md", "r") as archivo:
+                    correos = archivo.read()
+                    print(f"\n---Correos de R1---\n{correos}\n")
+            else:
+                #leer Correo_R2.md
+                with open("correos/Correo_R2.md", "r") as archivo:
+                    correos = archivo.read()
+                    print(f"\n---Correos de R2---\n{correos}\n")
             return hub, proveedor, hostname, tipo_red, tipo_zona, tipo_cobertura, region, zona, parroquia, feeder, cluster, horizontal_residencial, horizontal_comercial, vertical_residencial, vertical_comercial, cantidad_edficios_proyectados, edificio_residencial_proyectado, edificio_comercial_proyectado, solares, hp_total, puertos_habilitados
     except Exception as e:
         logging.error(f"Error al leer el archivo: {e}")
