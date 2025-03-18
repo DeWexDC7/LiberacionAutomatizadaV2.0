@@ -243,8 +243,8 @@ def exportar_excel_alcance(datos, ruta_archivo=None):
         else:
             totales['observacion'] = f"Feeder: {FEEDER}, Hub: {HUB}"
         
-        # Crear DataFrame de totales y concatenar eficientemente
-        df_final = pd.concat([df, pd.DataFrame([totales])], ignore_index=True)
+        # Crear DataFrame solo con la fila de totales (resultado final)
+        df_final = pd.DataFrame([totales])
         
         # Usar context manager para asegurar cierre de recursos
         with pd.ExcelWriter(ruta_archivo, engine='openpyxl') as writer:
@@ -253,18 +253,11 @@ def exportar_excel_alcance(datos, ruta_archivo=None):
             # Obtener la hoja de trabajo
             worksheet = writer.sheets['Resultados']
             
-            # Formatear última fila de manera más eficiente
-            ultima_fila = len(df_final) + 1
+            # Formatear fila de encabezados
             negrita = Font(bold=True)
-            
-            # Aplicar formato en lote para mejor rendimiento
             for col in range(1, len(encabezados) + 1):
-                worksheet.cell(row=ultima_fila, column=col).font = negrita
+                worksheet.cell(row=1, column=col).font = negrita
                 
-            # Añadir comentario explicativo
-            comment = Comment(text="Valores pendientes: Variables globales menos los registros existentes.", author="Sistema")
-            worksheet.cell(row=ultima_fila, column=1).comment = comment
-            
         print(f"Archivo Excel exportado en {ruta_archivo}")
         return ruta_archivo
         

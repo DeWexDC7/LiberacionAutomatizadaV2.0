@@ -54,17 +54,13 @@ def lectura_naps():
             else:
                 logging.warning(f"Columna '{col}' no encontrada en el Excel. Verificar el nombre exacto.")
         
-        # Extraer valores usando los nombres de columnas reales
-        codigos_nap = df[column_mappings.get("CODIGO_NAP")].dropna().tolist() if "CODIGO_NAP" in column_mappings else []
-        
-        # Para cada valor individual, usar iloc[0] solo si hay datos
         if len(df) == 0:
             logging.error("El archivo Excel no contiene datos")
             return None
             
-        # Obtener los valores individuales con manejo de errores
         try:
-            # Extraer valores para todos los NAPs
+            # Extraer columnas
+            codigo_nap_col = column_mappings.get("CODIGO_NAP")
             hub_col = column_mappings.get("HUB")
             cluster_col = column_mappings.get("CLUSTER")
             olt_col = column_mappings.get("OLT")
@@ -75,21 +71,70 @@ def lectura_naps():
             latitud_col = column_mappings.get("LATITUD")
             longitud_col = column_mappings.get("LONGITUD")
             
-            # Usamos el primer valor para mantener compatibilidad con el código existente
-            hub = df[hub_col].iloc[0] if hub_col else "Sin dato"
-            cluster = df[cluster_col].iloc[0] if cluster_col else "Sin dato"
-            olt = df[olt_col].iloc[0] if olt_col else "Sin dato"
-            frame = int(df[frame_col].iloc[0]) if frame_col and pd.notna(df[frame_col].iloc[0]) else 0
-            slot = int(df[slot_col].iloc[0]) if slot_col and pd.notna(df[slot_col].iloc[0]) else 0
-            puerto = int(df[puerto_col].iloc[0]) if puerto_col and pd.notna(df[puerto_col].iloc[0]) else 0
-            puertos_nap = int(df[puertos_nap_col].iloc[0]) if puertos_nap_col and pd.notna(df[puertos_nap_col].iloc[0]) else 0
-            latitud = float(df[latitud_col].iloc[0]) if latitud_col and pd.notna(df[latitud_col].iloc[0]) else 0.0
-            longitud = float(df[longitud_col].iloc[0]) if longitud_col and pd.notna(df[longitud_col].iloc[0]) else 0.0
+            # Verificar que existe la columna de código NAP
+            if not codigo_nap_col:
+                logging.error("No se encontró la columna de códigos NAP")
+                return None
+                
+            # Extraer todos los NAPs con sus datos correspondientes
+            nap_data = []
+            for idx, row in df.iterrows():
+                if pd.notna(row[codigo_nap_col]):
+                    nap_code = row[codigo_nap_col]
+                    
+                    # Extraer datos generales (usar el valor de la fila actual o valor predeterminado)
+                    hub = row[hub_col] if hub_col and pd.notna(row[hub_col]) else "Sin dato"
+                    cluster = row[cluster_col] if cluster_col and pd.notna(row[cluster_col]) else "Sin dato"
+                    olt = row[olt_col] if olt_col and pd.notna(row[olt_col]) else "Sin dato"
+                    frame = int(row[frame_col]) if frame_col and pd.notna(row[frame_col]) else 0
+                    slot = int(row[slot_col]) if slot_col and pd.notna(row[slot_col]) else 0
+                    puerto = int(row[puerto_col]) if puerto_col and pd.notna(row[puerto_col]) else 0
+                    puertos_nap = int(row[puertos_nap_col]) if puertos_nap_col and pd.notna(row[puertos_nap_col]) else 0
+                    
+                    # Extraer coordenadas de la fila actual
+                    latitud = float(row[latitud_col]) if latitud_col and pd.notna(row[latitud_col]) else 0.0
+                    longitud = float(row[longitud_col]) if longitud_col and pd.notna(row[longitud_col]) else 0.0
+                    
+                    # Guardar todos los datos relacionados con este NAP
+                    nap_data.append({
+                        "codigo_nap": nap_code,
+                        "hub": hub,
+                        "cluster": cluster,
+                        "olt": olt,
+                        "frame": frame,
+                        "slot": slot,
+                        "puerto": puerto,
+                        "puertos_nap": puertos_nap,
+                        "latitud": latitud,
+                        "longitud": longitud
+                    })
+            
+            if not nap_data:
+                logging.error("No se encontraron códigos NAP válidos en el Excel")
+                return None
+                
+            # Extraer códigos NAP para mantener compatibilidad
+            codigos_nap = [item["codigo_nap"] for item in nap_data]
+            
+            # Para mantener compatibilidad con el código existente, usamos los valores del primer NAP
+            # pero guardamos todos los datos para acceder a coordenadas individuales más adelante
+            first_nap = nap_data[0]
+            hub = first_nap["hub"]
+            cluster = first_nap["cluster"]
+            olt = first_nap["olt"]
+            frame = first_nap["frame"]
+            slot = first_nap["slot"]
+            puerto = first_nap["puerto"]
+            puertos_nap = first_nap["puertos_nap"]
+            latitud = first_nap["latitud"]
+            longitud = first_nap["longitud"]
             
             # Logging para depuración
-            logging.debug(f"hub: {hub}, cluster: {cluster}, olt: {olt}, frame: {frame}, slot: {slot}, puerto: {puerto}, puertos_nap: {puertos_nap}, latitud: {latitud}, longitud: {longitud}")
-
-            return hub, cluster, olt, frame, slot, puerto, codigos_nap, puertos_nap, latitud, longitud
+            logging.debug(f"Se encontraron {len(nap_data)} NAPs en el Excel")
+            logging.debug(f"Primer NAP - hub: {hub}, cluster: {cluster}, olt: {olt}, frame: {frame}, slot: {slot}, puerto: {puerto}")
+            
+            # Agregar nap_data como elemento adicional al retorno para usar en busqueda_naps_bd
+            return hub, cluster, olt, frame, slot, puerto, codigos_nap, puertos_nap, latitud, longitud, nap_data
         except Exception as e:
             logging.error(f"Error al extraer datos del Excel: {e}")
             return None
@@ -173,7 +218,8 @@ def busqueda_naps_bd():
     if result is None:
         return
     
-    hub, cluster, olt, frame, slot, puerto, codigos_nap_excel, puertos_nap, latitud, longitud = result
+    # Desempaquetar el resultado con el nuevo elemento nap_data
+    hub, cluster, olt, frame, slot, puerto, codigos_nap_excel, puertos_nap, latitud, longitud, nap_data = result
 
     conn = conexion_bd()
     if conn is not None:
@@ -189,9 +235,24 @@ def busqueda_naps_bd():
                 
                 # Crear un único archivo Excel para todos los NAPs faltantes
                 registros = []
-                for nap_faltante in codigos_faltantes:
-                    registro = crear_registro_nap(hub, cluster, olt, frame, slot, puerto, nap_faltante, puertos_nap, latitud, longitud)
-                    registros.append(registro)
+                
+                # Iterar sobre los datos completos de cada NAP
+                for nap_info in nap_data:
+                    if nap_info["codigo_nap"] in codigos_faltantes:
+                        # Usar los datos específicos de cada NAP
+                        registro = crear_registro_nap(
+                            nap_info["hub"], 
+                            nap_info["cluster"], 
+                            nap_info["olt"], 
+                            nap_info["frame"], 
+                            nap_info["slot"], 
+                            nap_info["puerto"], 
+                            nap_info["codigo_nap"], 
+                            nap_info["puertos_nap"], 
+                            nap_info["latitud"], 
+                            nap_info["longitud"]
+                        )
+                        registros.append(registro)
                 
                 # Exportar todos los registros a un único archivo Excel
                 exportar_registros_naps(registros)
