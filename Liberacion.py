@@ -181,7 +181,7 @@ def exportar_excel_alcance(datos, ruta_archivo=None):
         # Asegurar que el directorio existe
         os.makedirs(os.path.dirname(ruta_archivo), exist_ok=True)
 
-        # Definir los encabezados
+        # Definir los encabezados en el orden específico requerido
         encabezados = [
             'id', 'hostname', 'nombre', 'zona_cobertura', 'canton',
             'puertos_habilitados', 'hps_liberadas', 'home_passes',
@@ -207,6 +207,7 @@ def exportar_excel_alcance(datos, ruta_archivo=None):
         
         # Construir fila de diferencias entre variables globales y BD
         hoy = date.today()
+        fecha_formateada = hoy.strftime('%Y-%m-%d')
         
         # Crear diccionario de totales directamente
         totales = {
@@ -221,8 +222,8 @@ def exportar_excel_alcance(datos, ruta_archivo=None):
             'tipo_red': df.iloc[-1]['tipo_red'] if not df.empty else TIPO_DE_RED,
             'tipo': df.iloc[-1]['tipo'] if not df.empty else 'N/A',
             'tipo_zona': TIPO_DE_ZONA,
-            'fecha_liberacion': hoy,
-            'fecha_liberacion_corp': hoy,
+            'fecha_liberacion': fecha_formateada,
+            'fecha_liberacion_corp': fecha_formateada,
             'puertos_habilitados': PUERTOS_HABILITADOS - sumas['puertos_habilitados'],
             'hps_liberadas': HPs_TOTALES - sumas['hps_liberadas'],
             'home_passes': HOME_PASSES_TOTAL - sumas['home_passes'],
@@ -245,6 +246,9 @@ def exportar_excel_alcance(datos, ruta_archivo=None):
         
         # Crear DataFrame solo con la fila de totales (resultado final)
         df_final = pd.DataFrame([totales])
+        
+        # Reordenar las columnas en el orden especificado
+        df_final = df_final[encabezados]
         
         # Usar context manager para asegurar cierre de recursos
         with pd.ExcelWriter(ruta_archivo, engine='openpyxl') as writer:
@@ -293,67 +297,76 @@ def caso_liberacion():
     """
     Función para crear un archivo Excel con datos de un nuevo cluster que no existe en la BD.
     Usa las variables globales para llenar los campos y genera un ID único.
+    Versión optimizada para mejor rendimiento.
     """
     try:
-        # Generar el ID único
+        # Generar ID y fecha una sola vez
         id_cluster = id_hash_cluster()
+        fecha_formateada = date.today().strftime('%Y-%m-%d')
         
-        # Fecha actual
-        hoy = date.today()
-        
-        # Crear un registro con los datos de las variables globales
-        datos = [{
-            'id': id_cluster,
-            'hostname': HOSTNAME,
-            'nombre': CLUSTER,
-            'zona_cobertura': ZONA,
-            'canton': 'SAMBORONDON',
-            'puertos_habilitados': PUERTOS_HABILITADOS,
-            'hps_liberadas': HPs_TOTALES, 
-            'home_passes': HOME_PASSES_TOTAL,
-            'business_passes': BUSINESS_PASSES_TOTAL,
-            'fecha_liberacion': hoy,  # Fecha actual para liberación
-            'hp_horizontal_res': HORIZONTAL_RESIDENCIAL_HPs,
-            'hp_horizontal_com': HORIZONTAL_COMERCIAL_HPs,
-            'hp_vertical_res': VERTICAL_RESIDENCIAL_HPs,
-            'hp_vertical_com': VERTICAL_COMERCIAL_HPs,
-            'edif_res': EDIF_RESID_PROYECTADOS_HPs,
-            'edif_com': EDIF_COMERCIAL_PROYECTADOS_HPs,
-            'solares_res': SOLARES,
-            'tipo_cobertura': TIPO_DE_COBERTURA,
-            'region': REGION,
-            'parroquia': PARROQUIA,
-            'observacion': f"Feeder: {FEEDER}, Hub: {HUB}",
-            'tipo_red': TIPO_DE_RED,
-            'fecha_liberacion_corp': hoy,  # Fecha actual para liberación corporativa
-            'tipo': 'N/A',
-            'tipo_zona': TIPO_DE_ZONA
-        }]
-        
-        # Crear DataFrame
-        df = pd.DataFrame(datos)
-        
-        # Generar nombre de archivo
+        # Crear el directorio de salida de antemano
+        os.makedirs("generador", exist_ok=True)
         ruta_archivo = f"generador/liberacion_{CLUSTER}.xlsx"
         
-        # Asegurar que el directorio existe
-        os.makedirs(os.path.dirname(ruta_archivo), exist_ok=True)
+        # Crear un diccionario directamente con todos los datos necesarios
+        # Evita manipulaciones de listas intermedias
+        datos = {
+            'id': [id_cluster],
+            'hostname': [HOSTNAME],
+            'nombre': [CLUSTER],
+            'zona_cobertura': [ZONA],
+            'canton': ['SAMBORONDON'],
+            'puertos_habilitados': [PUERTOS_HABILITADOS],
+            'hps_liberadas': [HPs_TOTALES], 
+            'home_passes': [HOME_PASSES_TOTAL],
+            'business_passes': [BUSINESS_PASSES_TOTAL],
+            'fecha_liberacion': [fecha_formateada],
+            'hp_horizontal_res': [HORIZONTAL_RESIDENCIAL_HPs],
+            'hp_horizontal_com': [HORIZONTAL_COMERCIAL_HPs],
+            'hp_vertical_res': [VERTICAL_RESIDENCIAL_HPs],
+            'hp_vertical_com': [VERTICAL_COMERCIAL_HPs],
+            'edif_res': [EDIF_RESID_PROYECTADOS_HPs],
+            'edif_com': [EDIF_COMERCIAL_PROYECTADOS_HPs],
+            'solares_res': [SOLARES],
+            'tipo_cobertura': [TIPO_DE_COBERTURA],
+            'region': [REGION],
+            'parroquia': [PARROQUIA],
+            'observacion': [f"Feeder: {FEEDER}, Hub: {HUB}"],
+            'tipo_red': [TIPO_DE_RED],
+            'fecha_liberacion_corp': [fecha_formateada],
+            'tipo': ['N/A'],
+            'tipo_zona': [TIPO_DE_ZONA]
+        }
         
-        # Exportar a Excel con formato
+        # Crear DataFrame directamente con el orden correcto de columnas
+        columnas = [
+            'id', 'hostname', 'nombre', 'zona_cobertura', 'canton',
+            'puertos_habilitados', 'hps_liberadas', 'home_passes',
+            'business_passes', 'fecha_liberacion', 'hp_horizontal_res',
+            'hp_horizontal_com', 'hp_vertical_res', 'hp_vertical_com',
+            'edif_res', 'edif_com', 'solares_res', 'tipo_cobertura',
+            'region', 'parroquia', 'observacion', 'tipo_red',
+            'fecha_liberacion_corp', 'tipo', 'tipo_zona'
+        ]
+        
+        # Crear DataFrame directamente con las columnas ordenadas
+        df = pd.DataFrame(datos)[columnas]
+        
+        # Usar un contexto más simple para escribir en Excel
         with pd.ExcelWriter(ruta_archivo, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Liberación')
             
-            # Aplicar formato negrita a las celdas (encabezados)
+            # Aplicar formato negrita solo a los encabezados
             worksheet = writer.sheets['Liberación']
-            for col in range(1, len(df.columns) + 1):
-                celda = worksheet.cell(row=1, column=col)
-                celda.font = Font(bold=True)
-                
-        print(f"Archivo de liberación creado exitosamente en {ruta_archivo}")
+            negrita = Font(bold=True)
+            for col in range(1, len(columnas) + 1):
+                worksheet.cell(row=1, column=col).font = negrita
+        
+        logging.info(f"Archivo de liberación creado en {ruta_archivo}")
         return ruta_archivo
         
     except Exception as e:
-        print(f"Error en caso_liberación: {str(e)}")
+        logging.error(f"Error en caso_liberación: {str(e)}")
         return None
 
 def main():

@@ -4,6 +4,7 @@ import psycopg2
 import json
 import time
 import os
+from functools import lru_cache
 
 #configuracion logging
 logging.basicConfig(level=logging.DEBUG)
@@ -180,6 +181,8 @@ def get_region_zone_from_excel():
         logging.error(f"Error al leer región y zona del Excel: {e}")
         return "Sin dato", "Sin dato"
 
+# Caché para evitar consultas repetidas a la base de datos
+@lru_cache(maxsize=128)
 def get_region_zone_from_db(cluster):
     """Obtiene la región y zona desde la base de datos según el cluster"""
     # Primero intentamos obtener los datos del Excel
@@ -225,21 +228,25 @@ def busqueda_naps_bd():
     if conn is not None:
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT nap FROM inv_naps")
-            codigos_nap_bd = [row[0] for row in cursor.fetchall()]
+            # Optimizar consulta para obtener solo los NAPs que necesitamos verificar
+            placeholders = ','.join(['%s'] * len(codigos_nap_excel))
+            query = f"SELECT nap FROM inv_naps WHERE nap IN ({placeholders})"
+            cursor.execute(query, codigos_nap_excel)
+            codigos_nap_bd = {row[0] for row in cursor.fetchall()}
             
-            codigos_faltantes = set(codigos_nap_excel) - set(codigos_nap_bd)
+            codigos_faltantes = set(codigos_nap_excel) - codigos_nap_bd
             if codigos_faltantes:
                 print("Códigos NAP faltantes en la BD:")
                 print(codigos_faltantes)
                 
-                # Crear un único archivo Excel para todos los NAPs faltantes
+                # Procesar en lotes para mejor rendimiento
                 registros = []
+                batch_size = 100
+                current_batch = []
                 
                 # Iterar sobre los datos completos de cada NAP
                 for nap_info in nap_data:
                     if nap_info["codigo_nap"] in codigos_faltantes:
-                        # Usar los datos específicos de cada NAP
                         registro = crear_registro_nap(
                             nap_info["hub"], 
                             nap_info["cluster"], 
@@ -252,7 +259,16 @@ def busqueda_naps_bd():
                             nap_info["latitud"], 
                             nap_info["longitud"]
                         )
-                        registros.append(registro)
+                        current_batch.append(registro)
+                        
+                        # Procesar lotes para evitar sobrecarga de memoria
+                        if len(current_batch) >= batch_size:
+                            registros.extend(current_batch)
+                            current_batch = []
+                
+                # Añadir el último lote si existe
+                if current_batch:
+                    registros.extend(current_batch)
                 
                 # Exportar todos los registros a un único archivo Excel
                 exportar_registros_naps(registros)
@@ -270,32 +286,26 @@ def crear_registro_nap(hub, cluster, olt, frame, slot, puerto, nap, puertos_nap,
     # Obtener región y zona de la BD si están vacías o son "Sin dato"
     region, zona = get_region_zone_from_db(cluster)
     
-    logging.debug(f"Para NAP {nap}: Región={region}, Zona={zona}")
+    # Procesar coordenadas de manera más eficiente
+    coordenadas = "(Sin coordenadas)"
+    lat_str = ""
+    long_str = ""
     
-    # Convertir coordenadas a formato numérico si son strings
+    # Convertir coordenadas en una sola operación
     try:
-        if latitud and isinstance(latitud, str):
-            latitud = float(latitud.replace(',', '.'))
-        if longitud and isinstance(longitud, str):
-            longitud = float(longitud.replace(',', '.'))
+        lat_float = float(latitud.replace(',', '.')) if isinstance(latitud, str) else float(latitud) if latitud else 0
+        long_float = float(longitud.replace(',', '.')) if isinstance(longitud, str) else float(longitud) if longitud else 0
+        
+        if lat_float != 0 and long_float != 0:
+            coordenadas = f"({long_float:.6f}, {lat_float:.6f})"
+            lat_str = f"{lat_float:.6f}".replace('.', ',')
+            long_str = f"{long_float:.6f}".replace('.', ',')
     except (ValueError, TypeError):
         logging.warning(f"Error al convertir coordenadas a formato numérico para NAP {nap}")
     
-    # Formatear coordenadas con más decimales
-    if latitud and longitud and latitud != 0 and longitud != 0:
-        coordenadas = f"({longitud:.6f}, {latitud:.6f})"
-        # Formatear latitud y longitud para el DataFrame con comas como separador decimal
-        lat_str = f"{latitud:.6f}".replace('.', ',')
-        long_str = f"{longitud:.6f}".replace('.', ',')
-    else:
-        coordenadas = "(Sin coordenadas)"
-        lat_str = ""
-        long_str = ""
-    
-    # Obtener la fecha actual en formato DD/MM/YYYY
+    # Crear un diccionario con los datos de este NAP (usar fecha_hoy() una sola vez)
     fecha_liberacion = fecha_hoy()
     
-    # Crear un diccionario con los datos de este NAP
     return {
         "hub": hub,
         "cluster": cluster,
@@ -335,7 +345,8 @@ def exportacion_data(hub, cluster, olt, frame, slot, puerto, nap, puertos_nap, l
     exportar_registros_naps([registro])
 
 def fecha_hoy():
-    return time.strftime("%d/%m/%Y")
+    #generar fecha con este formato aaaa-mm-dd
+    return time.strftime("%Y-%m-%d")
 
 def presentacion_resultados():
     print("-----------------------------------------------------")
