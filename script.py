@@ -152,7 +152,7 @@ def confirmar_salida():
         print(Fore.YELLOW + "\nCerrando el programa. ¡Hasta pronto!")
         
         # Animación de cierre
-        for i in range(5, 0, -1):
+        for i in range(4, 0, -1):
             sys.stdout.write('\r')
             sys.stdout.write(Fore.CYAN + f"El programa se cerrará en {i} segundos...")
             sys.stdout.flush()
